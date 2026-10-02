@@ -14,8 +14,11 @@ def claim_one(conn):
         row = conn.execute(
             """
             SELECT id, probe_id, temp_c
-            FROM probe_readings
-            WHERE status = 'pending'
+            FROM probe_readings r
+            WHERE r.status = 'pending'
+              AND NOT EXISTS (
+                  SELECT 1 FROM loading_package_items i WHERE i.reading_id = r.id
+              )
             ORDER BY id
             FOR UPDATE SKIP LOCKED
             LIMIT 1
@@ -24,7 +27,14 @@ def claim_one(conn):
         if not row:
             return None
         conn.execute(
-            "UPDATE probe_readings SET status = 'processing' WHERE id = %s",
+            """
+            UPDATE probe_readings r
+            SET status = 'processing'
+            WHERE id = %s
+              AND NOT EXISTS (
+                  SELECT 1 FROM loading_package_items i WHERE i.reading_id = r.id
+              )
+            """,
             (row["id"],),
         )
         return row
@@ -34,9 +44,12 @@ def finish(conn, reading_id: int, temp_c: float) -> None:
     verdict, reason = judge_temp(temp_c)
     conn.execute(
         """
-        UPDATE probe_readings
+        UPDATE probe_readings r
         SET status = 'done', verdict = %s, reason = %s, processed_at = now()
         WHERE id = %s
+          AND NOT EXISTS (
+              SELECT 1 FROM loading_package_items i WHERE i.reading_id = r.id
+          )
         """,
         (verdict, reason, reading_id),
     )
@@ -51,7 +64,14 @@ def run_once(conn) -> bool:
         finish(conn, row["id"], float(row["temp_c"]))
     except Exception:
         conn.execute(
-            "UPDATE probe_readings SET status = 'pending' WHERE id = %s",
+            """
+            UPDATE probe_readings r
+            SET status = 'pending'
+            WHERE id = %s
+              AND NOT EXISTS (
+                  SELECT 1 FROM loading_package_items i WHERE i.reading_id = r.id
+              )
+            """,
             (row["id"],),
         )
         conn.commit()

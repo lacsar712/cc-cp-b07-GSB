@@ -23,6 +23,44 @@ CREATE TABLE IF NOT EXISTS probe_readings (
     processed_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS idx_probe_readings_status ON probe_readings (status, id);
+
+CREATE TABLE IF NOT EXISTS loading_packages (
+    id serial PRIMARY KEY,
+    loading_no text NOT NULL UNIQUE,
+    status text NOT NULL DEFAULT 'sealed',
+    sealed_by text NOT NULL,
+    sealed_at timestamptz NOT NULL DEFAULT now(),
+    unbundled_by text,
+    unbundled_at timestamptz,
+    unbundle_reason text
+);
+
+CREATE TABLE IF NOT EXISTS loading_package_items (
+    package_id int NOT NULL REFERENCES loading_packages(id),
+    reading_id int NOT NULL REFERENCES probe_readings(id),
+    probe_id text NOT NULL,
+    temp_c double precision NOT NULL,
+    verdict text,
+    reason text,
+    reading_status text NOT NULL,
+    created_by text,
+    reading_created_at timestamptz,
+    processed_at timestamptz,
+    sealed_at timestamptz NOT NULL,
+    PRIMARY KEY (package_id, reading_id)
+);
+CREATE INDEX IF NOT EXISTS idx_loading_package_items_reading
+    ON loading_package_items (reading_id);
+
+CREATE TABLE IF NOT EXISTS loading_unbundle_log (
+    id serial PRIMARY KEY,
+    package_id int NOT NULL,
+    loading_no text NOT NULL,
+    reading_ids integer[] NOT NULL,
+    unbundled_by text NOT NULL,
+    unbundled_at timestamptz NOT NULL DEFAULT now(),
+    reason text
+);
 """
 
 
